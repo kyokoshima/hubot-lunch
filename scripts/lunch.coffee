@@ -1,6 +1,6 @@
 cron = require('cron').CronJob
 room = process.env.HUBOT_IRC_ROOMS
-
+prefix = 'lunch'
 
 module.exports = (robot) ->
 	robot.enter ->
@@ -10,40 +10,11 @@ module.exports = (robot) ->
 		timeZone: "Asia/Tokyo"
 		onTick: ->
 			robot.send {room: room}, "昼飯時です！"
-			shops = robot.brain.data.shop
-			for k,v of shops
-	   		jd = "#{v.date.getMonth()+1}月#{v.date.getDate()}日"
-  	  	robot.send {room: room}, "#{k} #{jd}"
-
-	robot.hear /^(.+)行った店/, (msg) ->
-		line = msg.message.text
-		
-		cmds = line.split(/\s/)		
-		console.log cmds
-		day = msg.match[1]
-		shopName = cmds[1]
-		console.log robot.brain.data
-	
-		console.log "#{day} #{shopName}"
-	
-		date = new Date()
-		switch true
-			# when /今日/.test(day)
-			when /昨日/.test(day)
-				date = new Date(date.getYear(), date.getMonth(), date.getDate()-1)	
-		
-		# console.log date
-		# console.log msg.message
-		# robot.brain.data.shop = {}
-		unless robot.brain.data.shop
-			robot.brain.data.shop = {}
-		robot.brain.data.shop[shopName] = {date: date}
-		
-		robot.brain.save
-		shops = robot.brain.data.shop
-		for k, v of shops
-			jd = "#{v.date.getMonth()+1}月#{v.date.getDate()}日"
-			robot.send {room: room}, "#{k} #{jd}"
+			showRecommend()
+			#shops = robot.brain.data.shop
+			#for k,v of shops
+		 #		jd = "#{v.date.getMonth()+1}月#{v.date.getDate()}日"
+		 # 	robot.send {room: room}, "#{k} #{jd}"
 
 	robot.hear /lunch test/, (msg) ->
 		robot.send {room: room}, "#{room}"
@@ -51,7 +22,7 @@ module.exports = (robot) ->
 		showRecommend()
 
 	robot.hear /lunch add\s+(\S+)\s*(.*)/, (msg) ->
-		s = msg.match[1]
+		shopName = msg.match[1]
 		params = msg.match[2].split(/\s/)
 
 		po = {}
@@ -60,6 +31,7 @@ module.exports = (robot) ->
 			po[kv[0]] = kv[1] if kv[0] and kv[1]
 
 		now = new Date()
+		now.setHours(0,0,0,0)
 		if po.date
 			goDay = new Date(po.date)
 			goDay.setYear now.getFullYear()
@@ -70,28 +42,44 @@ module.exports = (robot) ->
 
 		console.log goDay
 		
-		robot.brain.data.shop ||= []
-		unless robot.brain.data.shop[s]
-			robot.brain.data.shop[s] = {date: [goDay]}
+		# robot.brain.data.shop ||= []
+		shops = getShopData() ? []
+		#console.log shops, shopName
+		#console.log shops[shopName]
+		unless shops[shopName]
+			console.log "went to #{shopName} for the first time. "
+			setShopData shopName, {date: [goDay]}
 		else
-			# console.log "hhhhh"
-			dates = robot.brain.data.shop[s].date
+			# console.log shops
+			shop = shops[shopName]
 			exist = false
-			for date in dates
-				# console.log "#{date.getTime()}:#{today.getTime()}"
-				if date.getTime() == today.getTime()
+			wentTimes = 0
+			for date in shop.date
+				#console.log "visited #{date}"
+				date = new Date(date)
+				#console.log date
+				console.log "#{date.getTime()}:#{goDay.getTime()}"
+				if date.getTime() == goDay.getTime()
 					exist = true
-			robot.brain.data.shop[s].date.push goDay unless exist
+				wentTimes++
+				console.log exist, wentTimes
+			console.log "you went to #{shopName} #{wentTimes} times."
+			shop.date.push goDay unless exist
+			console.log shop
+			setShopData shopName, shop
+		#robot.brain.set('shops', shops)
 
-		robot.brain.save
-		
+		#console.log robot.brain.get('shops')
+		#robot.brain.save()
+		#setShopData shopName, shops[shopName]
+
 		showRecommend()
 
 	robot.hear /\+1\s+(\S+)/, (msg) ->
 		shopName = msg.match[1]
 		console.log shopName
 		console.log robot.brain.data.shop[shopName]
-		if robot.brain.data.shop[shopName]	
+		if robot.brain.data.shop[shopName]
 			user = msg.message.user.name
 			robot.brain.data.shop[shopName].rating = {user: user, rate: +1}
 		robot.brain.save
@@ -101,16 +89,34 @@ module.exports = (robot) ->
 		showRecommend()
 
 	robot.hear /lunch history/, (msg) ->
-		showRecommend()	
+		showRecommend()
 
 	robot.hear /lunch truncate/, (msg) ->
 		console.log robot.brain.data
-		delete robot.brain.data.shop
-		robot.brain.save
+		delete robot.brain.data.shops
+		robot.brain.save()
+
+	robot.hear /lunch data/, (msg) ->
+	
+		robot.send {room: room} , JSON.stringify(getShopData(), null, " ")
 
 	showRecommend = () ->
-		# console.log robot.brain.data.shop
-		for name, attr of robot.brain.data.shop
-			console.log name, attr
+		#console.log getShopData()
+		for name, attr of getShopData() 
+		  #console.log name, attr
 			for date in attr.date
-				console.log name, date
+				date = new Date(date)
+				#console.log formatDate(date)
+				robot.send {room:room}, "日付:#{formatDate(date)} 名前:#{name}"
+	
+	getShopData = () ->
+		robot.brain.data.shops
+
+	setShopData = (name, attr) ->
+		robot.brain.data['shops'] = {} unless robot.brain.data['shops']
+		robot.brain.data.shops[name] = attr
+		robot.brain.save()
+
+	formatDate = (date) ->
+		# console.log date.getFullYear()
+		"#{date.getFullYear()}年#{date.getMonth()+1}月#{date.getDate()}日"
