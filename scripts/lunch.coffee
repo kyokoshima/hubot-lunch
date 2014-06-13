@@ -100,7 +100,33 @@ module.exports = (robot) ->
 	
 		robot.send {room: room} , JSON.stringify(getShopData(), null, " ")
 
+	robot.hear /lunch remove (\S+)\s*(\S*)/, (msg) ->
+		name = msg.match[1]
+		date = msg.match[2]
+
+		# console.log name, date
+
+		shop = getShopData name
+
+		console.log shop
+		if date
+			date = new Date(date)
+			date.setYear(new Date().getFullYear())
+			newDates = []
+			for went in shop.date
+				went = new Date(went)
+				console.log went, date
+				newDates.push went unless went.getTime() == date.getTime()
+			
+			console.log newDates
+			shop.date = newDates
+			setShopData name, shop
+
+		console.log getShopData(name)		
+
+
 	showRecommend = () ->
+
 		#console.log getShopData()
 		for name, attr of getShopData() 
 		  #console.log name, attr
@@ -109,10 +135,14 @@ module.exports = (robot) ->
 				#console.log formatDate(date)
 				robot.send {room:room}, "日付:#{formatDate(date)} 名前:#{name}"
 	
-	getShopData = () ->
-		robot.brain.data.shops
+	getShopData = (key) ->
+		if key
+			robot.brain.data.shops[key] 
+		else
+			robot.brain.data.shops
 
 	setShopData = (name, attr) ->
+		console.log name,attr
 		robot.brain.data['shops'] = {} unless robot.brain.data['shops']
 		robot.brain.data.shops[name] = attr
 		robot.brain.save()
